@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Compliance Checker</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { 
+            font-family: Arial; 
+            max-width: 1200px; 
+            margin: 20px auto; 
+            padding: 20px; 
+            background: #f5f5f5; 
+        }
+        .container { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+        }
+        .upload-area { 
+            border: 2px dashed #ccc; 
+            padding: 20px; 
+            text-align: center; 
+            margin: 20px 0; 
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover { 
+            border-color: #2196f3; 
+            background: #f8f8f8; 
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-bottom: 20px; 
+            font-size: 14px;
+        }
+        th, td { 
+            border: 1px solid #ddd; 
+            padding: 8px; 
+            text-align: left; 
+        }
+        th {
+            background: #f5f5f5;
+            font-weight: bold;
+        }
+        button { 
+            padding: 8px 16px; 
+            background: #2196f3; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin-right: 10px;
+            transition: background 0.3s;
+        }
+        button:hover:not(:disabled) {
+            background: #1976d2;
+        }
+        button:disabled { 
+            background: #ccc; 
+            cursor: not-allowed;
+        }
+        .progress-bar { 
+            height: 20px; 
+            background: #eee; 
+            margin: 20px 0; 
+            border-radius: 10px; 
+            overflow: hidden; 
+        }
+        .progress { 
+            width: 0%; 
+            height: 100%; 
+            background: #4a9eff; 
+            transition: width 0.3s ease;
+        }
+        .result-item { 
+            margin: 20px 0; 
+            padding: 20px; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .alert-info {
+            background: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+            margin-top: 10px;
+        }
+        .alert-info div {
+            margin: 5px 0;
+            line-height: 1.5;
+        }
+        .alert-id {
+            font-weight: bold;
+            color: #1976d2;
+            margin-bottom: 10px;
+            padding: 5px 0;
+        }
+        .screenshot-link {
+            display: inline-flex;
+            align-items: center;
+            margin: 5px 0;
+            color: #2196f3;
+            text-decoration: none;
+            padding: 8px 12px;
+            background: #e3f2fd;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+        .screenshot-link:hover {
+            background: #bbdefb;
+        }
+        .error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Compliance Checker</h1>
+        
+        <div class="upload-area" id="upload-area">
+            <p>Drop your CSV file here or click to browse</p>
+            <input type="file" id="file-input" accept=".csv" style="display: none">
+        </div>
+
+        <button id="process-btn" disabled>Process Data</button>
+        <button id="download-btn" disabled>Download Results</button>
+        
+        <div class="progress-bar">
+            <div class="progress" id="progress"></div>
+        </div>
+        <div id="progress-text"></div>
+
+        <div id="data-table"></div>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2NvdW50SWQiOiJkOUFpbXhLM05yZkd4V1dGSiIsImlhdCI6MTczNDQ0OTQ5MH0.w0p5tm9lSs5UqsEDFN0mUq2gCxWN_SJpfXTE2Qjxol4';
+        let csvData = [];
+        let processedResults = [];
+
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const processBtn = document.getElementById('process-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const progress = document.getElementById('progress');
+        const progressText = document.getElementById('progress-text');
+        const dataTable = document.getElementById('data-table');
+        const resultsDiv = document.getElementById('results');
+
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            uploadArea.style.borderColor = '#2196f3';
+            uploadArea.style.background = '#f8f8f8';
+        });
+
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            uploadArea.style.borderColor = '#ccc';
+            uploadArea.style.background = 'white';
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            uploadArea.style.borderColor = '#ccc';
+            uploadArea.style.background = 'white';
+            
+            const files = e.dataTransfer.files;
+            if (files.length) {
+                handleFile(files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file || !file.name.toLowerCase().endsWith('.csv')) {
+                alert('Please select a CSV file');
+                return;
+            }
+
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    const text = e.target.result;
+                    const rows = text.split('\n');
+                    const headers = rows[0].split(',');
+                    
+                    csvData = rows.slice(1)
+                        .map(row => {
+                            const values = row.split(',');
+                            const obj = {};
+                            headers.forEach((header, i) => {
+                                obj[header.trim()] = values[i]?.trim();
+                            });
+                            return obj;
+                        })
+                        .filter(row => row.ISIN);
+
+                    showDataTable();
+                    processBtn.disabled = false;
+                    downloadBtn.disabled = true;
+                    resultsDiv.innerHTML = '';
+                    console.log('CSV Data loaded:', csvData);
+                } catch (error) {
+                    console.error('Error parsing CSV:', error);
+                    alert('Error parsing CSV file. Please check the file format.');
+                }
+            };
+            
+            reader.onerror = (error) => {
+                console.error('Error reading file:', error);
+                alert('Error reading file. Please try again.');
+            };
+            
+            reader.readAsText(file);
+        }
+
+        function showDataTable() {
+            if (!csvData.length) return;
+            
+            const headers = Object.keys(csvData[0]);
+            let table = '<table><tr>';
+            headers.forEach(header => table += `<th>${header}</th>`);
+            table += '</tr>';
+            
+            csvData.forEach(row => {
+                table += '<tr>';
+                headers.forEach(header => table += `<td>${row[header] || ''}</td>`);
+                table += '</tr>';
+            });
+            
+            dataTable.innerHTML = table + '</table>';
+        }
+
+        function formatOutput(text) {
+            if (!text) return '';
+            
+            try {
+                if (text.includes('Type:')) {
+                    const lines = text.split('\n');
+                    const data = {};
+                    lines.forEach(line => {
+                        const [key, value] = line.split(': ').map(s => s.trim());
+                        if (key && value) {
+                            data[key] = value;
+                        }
+                    });
+                    return `
+                        <div class="alert-info">
+                            <div><strong>Type:</strong> ${data.Type || 'N/A'}</div>
+                            <div><strong>Flag:</strong> ${data.Flag || 'N/A'}</div>
+                            <div><strong>Alert Type:</strong> ${data.Alert_type || 'N/A'}</div>
+                            <div><strong>Justification:</strong> ${data.Justification || 'N/A'}</div>
+                            <div><strong>Action:</strong> ${data.Action || 'N/A'}</div>
+                            <div><strong>Timestamp:</strong> ${data.Timestamp || 'N/A'}</div>
+                            ${data.Status ? `<div><strong>Status:</strong> ${data.Status}</div>` : ''}
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                console.log('Error parsing output:', e);
+            }
+            
+            return text.replace(/\*\*/g, '').replace(/\n/g, '<br>');
+        }
+
+        async function displayResult(row, data) {
+            if (!data.execution?.outputs) return;
+
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'result-item';
+            
+            let content = `<h3>Results for Alert_Id: ${row.Alert_Id}, ISIN: ${row.ISIN}</h3>`;
+
+            // Display Alert ID if present
+            if (row.Alert_Id) {
+                content += `
+                    <div class="alert-id">
+                        Alert ID: ${row.Alert_Id}
+                    </div>
+                `;
+            }
+
+            const outputs = data.execution.outputs;
+
+            // Store for CSV export
+            processedResults.push({
+                isin: row.ISIN,
+                alert_id: row.Alert_Id || '',
+                outputs: outputs
+            });
+
+            // Display report outputs
+            if (outputs['25-output']) {
+                content += `
+                    <div style="margin-top: 15px;">
+                        <div style="font-weight: bold;">Report</div>
+                        <div style="margin-top: 5px;">${formatOutput(outputs['25-output'])}</div>
+                    </div>
+                `;
+            }
+
+            // Display screenshots
+            Object.entries(outputs).forEach(([key, value]) => {
+                if (value && value.type === 'image' && value.url) {
+                    content += `
+                        <div style="margin-top: 10px;">
+                            <a href="${value.url}" target="_blank" class="screenshot-link">
+                                <i class="fas fa-image"></i> View Screen Capture
+                            </a>
+                        </div>
+                    `;
+                }
+            });
+
+            resultDiv.innerHTML = content;
+            resultsDiv.appendChild(resultDiv);
+            downloadBtn.disabled = false;
+        }
+
+        async function processRow(row) {
+            try {
+                console.log('Processing:', row);
+                const execResponse = await fetch('https://cloud.integrail.ai/api/d9AimxK3NrfGxWWFJ/agent/CxroQo2DwZGYnFg5e/execute', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${API_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ inputs: row })
+                });
+
+                if (!execResponse.ok) {
+                    throw new Error(`Execute failed: ${execResponse.status}`);
+                }
+
+                const execData = await execResponse.json();
+                console.log('Execute response:', execData);
+                
+                if (!execData.executionId) {
+                    throw new Error('No execution ID received');
+                }
+
+                let attempts = 0;
+                const maxAttempts = 180; // 15 minutes total
+                let lastStatus = '';
+
+                while (attempts < maxAttempts) {
+                    const statusResponse = await fetch(
+                        `https://cloud.integrail.ai/api/d9AimxK3NrfGxWWFJ/agent/${execData.executionId}/status`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${API_TOKEN}`
+                            }
+                        }
+                    );
+
+                    if (!statusResponse.ok) {
+                        throw new Error(`Status check failed: ${statusResponse.status}`);
+                    }
+
+                    const statusData = await statusResponse.json();
+                    const currentStatus = statusData.execution?.status;
+                    
+                    if (currentStatus !== lastStatus) {
+                        console.log(`ISIN ${row.ISIN} status: ${currentStatus}`);
+                        lastStatus = currentStatus;
+                    }
+
+                    if (currentStatus === 'finished') {
+                        return statusData;
+                    } else if (currentStatus === 'failed' || currentStatus === 'error') {
+                        throw new Error(`Processing failed: ${statusData.execution?.message || 'Unknown error'}`);
+                    }
+
+                    await new Promise(r => setTimeout(r, 5000));
+                    attempts++;
+                }
+
+                throw new Error('Processing timeout');
+            } catch (error) {
+                console.error('Error in processRow:', error);
+                throw error;
+            }
+        }
+
+        processBtn.onclick = async () => {
+            processBtn.disabled = true;
+            downloadBtn.disabled = true;
+            resultsDiv.innerHTML = '';
+            processedResults = [];
+            
+            for (let i = 0; i < csvData.length; i++) {
+                const row = csvData[i];
+                progress.style.width = `${((i + 1) / csvData.length) * 100}%`;
+                progressText.textContent = `Processing row ${i + 1} of ${csvData.length} (ISIN: ${row.ISIN})`;
+
+                try {
+                    const result = await processRow(row);
+                    await displayResult(row, result);
+                } catch (error) {
+                    console.error('Error processing row:', error);
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'result-item';
+                    errorDiv.innerHTML = `
+                        <h3 style="color: red;">Error processing ISIN: ${row.ISIN}</h3>
+                        <p class="error">${error.message}</p>
+                    `;
+                    resultsDiv.appendChild(errorDiv);
+                }
+
+                // Add longer delay between processing rows
+                if (i < csvData.length - 1) {
+                    progressText.textContent = `Waiting before processing next row...`;
+                    await new Promise(r => setTimeout(r, 10000)); // 10 second delay between rows
+                }
+            }
+
+            processBtn.disabled = false;
+            progress.style.width = '100%';
+            progressText.textContent = 'Processing complete!';
+        };
+
+        downloadBtn.onclick = () => {
+            if (!processedResults.length) {
+                alert('No results to download');
+                return;
+            }
+
+            const rows = [['ISIN', 'Alert ID', 'Type', 'Flag', 'Alert Type', 'Justification', 'Action', 'Timestamp', 'Status']];
+            
+            processedResults.forEach(result => {
+                const outputs = result.outputs;
+                if (outputs['25-output']) {
+                    try {
+                        const lines = outputs['25-output'].split('\n');
+                        const data = {};
+                        lines.forEach(line => {
+                            const [key, value] = line.split(': ').map(s => s.trim());
+                            if (key && value) {
+                                data[key] = value;
+                            }
+                        });
+                        
+                        rows.push([
+                            result.isin,
+                            result.alert_id,
+                            data.Type || '',
+                            data.Flag || '',
+                            data.Alert_type || '',
+                            data.Justification || '',
+                            data.Action || '',
+                            data.Timestamp || '',
+                            data.Status || ''
+                        ]);
+                    } catch (e) {
+                        console.error('Error processing result for CSV:', e);
+                    }
+                }
+            });
+
+            const csvContent = rows
+                .map(row => row.map(cell => {
+                    if (typeof cell === 'string' && (cell.includes(',') || cell.includes('"'))) {
+                        return `"${cell.replace(/"/g, '""')}"`;
+                    }
+                    return cell;
+                }).join(','))
+                .join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `compliance_results_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        };
+
+        // Add error handling for API token expiration
+        window.addEventListener('unhandledrejection', event => {
+            if (event.reason.message.includes('401')) {
+                alert('Session expired. Please refresh the page and try again.');
+                processBtn.disabled = false;
+                progress.style.width = '0%';
+                progressText.textContent = '';
+            }
+        });
+    </script>
+</body>
+</html>
