@@ -369,7 +369,7 @@
 
                 while (attempts < maxAttempts) {
                     const statusResponse = await fetch(
-                        `https://cloud.integrail.ai/api/Q4gmrB8jCfx5MD7Ny/agent/{execData.executionId}/status`,
+                        `https://cloud.integrail.ai/api/Q4gmrB8jCfx5MD7Ny/agent/${execData.executionId}/status`,
                         {
                             headers: {
                                 'Authorization': `Bearer ${API_TOKEN}`
